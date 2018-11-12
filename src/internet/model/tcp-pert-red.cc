@@ -104,7 +104,48 @@ void
 TcpPertRed::IncreaseWindow (Ptr<TcpSocketState> tcb, uint32_t segmentsAcked)
 {
   NS_LOG_FUNCTION (this << tcb << segmentsAcked);
+
   NS_LOG_FUNCTION (this << tcb << segmentsAcked);
+  bool early_response = false;
+  Ptr<UniformRandomVariable> prob_this_pkt = CreateObject<UniformRandomVariable> ();  
+//proactive_slowdown       
+  if (tcb->m_cWnd > tcb->m_ssThresh && (prob_this_pkt->GetValue() <= m_pertProb) && (tcb->m_lastAckedSeq >= m_lastEarlyResponseSeq))
+    {  
+      if (m_ndp1 != 0)
+      {
+          m_historyNDp1.erase(m_historyNDp1.begin());
+              
+        m_historyNDp1.push_back(m_ndp1);
+        double den = 0;
+        for (int i=0;i<8;i++)
+        {
+          den = den + m_weight[i]*m_historyNDp1[i];
+        }       
+        m_erProb = 6/(den);
+        m_ndp1 = 0;                                         //Reset the epoch packets
+      }
+    tcb->m_cWnd = ((1-m_beta) * tcb->GetCwndInSegments ()) * tcb->m_segmentSize;
+    tcb->m_ssThresh = GetSsThresh (tcb, 0);
+    early_response = true;
+    m_lastEarlyResponseSeq = tcb->m_lastAckedSeq;
+  }     
+  if (!early_response)
+    {
+      m_nd = m_nd + 1;
+      m_ndp1 = m_ndp1 + 1;
+      CheckChangeLossProb(tcb);
+      if (tcb->m_cWnd < tcb->m_ssThresh)
+        {
+           TcpNewReno::SlowStart (tcb, segmentsAcked);
+        }
+      if (tcb->m_cWnd >= tcb->m_ssThresh)
+        {
+          double adder = static_cast<double> (m_alpha) / tcb->GetCwndInSegments ();
+          tcb->m_cWnd += static_cast<uint32_t> (adder)* tcb->m_segmentSize;
+          NS_LOG_INFO ("In CongAvoid, updated to cwnd " << tcb->m_cWnd <<
+                       " ssthresh " << tcb->m_ssThresh);
+                 }
+    }
 }
 
 std::string
