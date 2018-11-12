@@ -122,6 +122,19 @@ TcpPertRed::GetSsThresh (Ptr<const TcpSocketState> tcb,
 }
 void TcpPertRed::UpdatePertVars(const Time& l_rtt)
 {
+  m_thresh3 = Time(Seconds (std::max ((2*m_thresh2.GetSeconds ()), 0.65*(m_maxRtt.GetSeconds () - m_minRtt.GetSeconds ()))));
+  if (m_pertSrtt> 0) 
+  {
+    m_pertSrtt = m_pertSrtt*0.99 + 0.01 *l_rtt.GetSeconds ();
+  }
+  if (m_pertSrtt <= 0) 
+  {
+          m_pertSrtt = l_rtt.GetSeconds ();            
+  }      
+  double maxq = std::max(0.010, (m_maxRtt.GetSeconds () - m_minRtt.GetSeconds ())); 
+  double curq = m_pertSrtt - m_minRtt.GetSeconds ();
+  if (curq > 0)
+    m_beta = (curq) / ((curq + maxq)); 
 }
 void TcpPertRed::CheckChangeLossProb(Ptr<TcpSocketState> tcb)
 {
