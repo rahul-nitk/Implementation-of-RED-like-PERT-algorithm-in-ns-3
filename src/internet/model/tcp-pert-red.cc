@@ -82,8 +82,23 @@ TcpPertRed::CongestionStateSet (Ptr<TcpSocketState> tcb,
                               const TcpSocketState::TcpCongState_t newState)
 {
   NS_LOG_FUNCTION (this << tcb << newState);
-
+  if(newState ==  TcpSocketState::CA_RECOVERY or newState ==  TcpSocketState::CA_LOSS )
+  {
+    m_changeWindow = 0;
+    if (m_nd != 0) {
+      m_historyND.erase(m_historyND.begin());
+      m_historyND.push_back(m_nd);
+      double L = 0;
+      for (int i=0;i<8;i++)
+      {
+        L = L + m_weight[i]*m_historyND[i];
+      }     
+      m_dProb = 6/(L);
+      m_nd = 0; 
+  }
+   }
 }
+
 
 void
 TcpPertRed::IncreaseWindow (Ptr<TcpSocketState> tcb, uint32_t segmentsAcked)
