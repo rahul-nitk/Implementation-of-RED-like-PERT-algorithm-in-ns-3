@@ -129,5 +129,86 @@ void TcpPertRed::CalculateP ()
 }
 void TcpPertRed::CheckAndSetAlpha(Ptr<TcpSocketState> tcb)           
 {
-}
+  double curr_rtt = m_pertSrtt;              
+  double maxq = std::max(0.010, (m_maxRtt.GetSeconds () - m_minRtt.GetSeconds ())); ////Type Conversion
+  double curq = curr_rtt - m_minRtt.GetSeconds ();
+  double k1,k2,pp1,target;
+  if (curq <= m_thresh1.GetSeconds ())
+  {
+    //then we are in the high speed region
+    m_highspeedRegionCounter++;               
+    m_mode=0;                                  
+  }
+  else if (curq >= 0.5*maxq)
+  {
+    //then we are in the competitive region
+    m_competeRegionCounter++;         
+    m_mode = 2;
+  }
+  else
+  {
+    //else, we are in the safe region
+    m_highspeedRegionCounter = 0;
+    m_competeRegionCounter = 0;
+    m_mode = 1;
+  }
+  //now, update alpha accordingly
+  //if 5 rtts have elapsed, then update alpha accordingly
+  if (Simulator::Now ().GetSeconds () - m_lastUpdatedAlpha.GetSeconds () >= 5*curr_rtt)        /////Time Type
+  {
+    //if we are in the compete region then alpha=
+    if (m_competeRegionCounter >= tcb->m_cWnd)
+    {
+      //if the drop probability is not zero, then
+      if (m_dProb != 0)
+      {
+        pp1=(1 + (m_erProb / m_dProb));
+        if (curq > (maxq/2) && curq < (0.65*maxq)) 
+        {
+          k1 = ((pp1-1)*maxq*16)/(15*100);
+          k2 = 1 + ((k1*100)/maxq);
+          target = k2 - (k1/(curq - 0.49*maxq));
+        }
+        else
+          target = pp1;
+
+        m_alpha = std::min( m_alpha+0.1, target);
+        m_alpha = std::min(m_alpha, m_alphaMax);
+      }
+      //else, if the drop probability is zero:
+      else
+      {
+          m_alpha = std::min(m_alpha+0.1, m_alphaMax);
+      }
+    }
+    // if we are in the highspeed region then alpha=
+    else if (m_highspeedRegionCounter >= tcb->m_cWnd)
+    {
+      //update alpha
+      m_alpha = std::min((m_alpha+0.5), m_alphaMax);
+    }
+    //else, if we are in the safe region, then alpha=
+    else
+    {
+      //if the current queue is between the min threshold and the max threshold
+      if (curq > m_thresh1.GetSeconds () && curq < m_thresh2.GetSeconds ()) {
+        k2 = (m_thresh2.GetSeconds () - m_thresh1.GetSeconds ())/31;
+        k1 = k2 + m_thresh2.GetSeconds ();
+        target = (k1)/(k2+curq);
+      }
+      else
+        target = 1;
+
+      m_alpha = 0.9*m_alpha;
+
+      if (m_alpha < 1)
+        m_alpha = 1;
+    }
+    //now, reset the counters
+    m_competeRegionCounter=0;
+    m_highspeedRegionCounter=0;
+    //update the last time alpha was updated
+    m_lastUpdatedAlpha=Simulator::Now (); 
+   }
+  }
 } // namespace ns3
